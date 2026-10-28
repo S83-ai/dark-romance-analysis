@@ -38,7 +38,7 @@ clean = pd.read_csv(ROOT / "data" / "books_clean.csv")
 df = clean[clean["popular"].notna()].copy()
 df["popular"] = df["popular"].astype(int)
 df["label"] = df["popular"].map({0: "Not popular", 1: "Popular"})
-df["rating_rel"] = df["rating"].where(df["rating_reliable"] == 1)
+df["rating_obs"] = df["rating"].where(df["n_ratings"].fillna(0) >= 1)
 df["log_wtr"] = np.log10(df["want_to_read"] + 1)
 ORDER = ["Not popular", "Popular"]
 
@@ -58,11 +58,11 @@ print(df["label"].value_counts())
 num_features = ["pages", "year", "n_editions", "n_subjects"]
 summary = df.groupby("label")[num_features].agg(["count", "mean", "median", "std"]).round(2).T
 display(summary)
-display(df[num_features + ["rating_rel"]].describe().T.round(2))
+display(df[num_features + ["rating_obs"]].describe().T.round(2))
 
 # %%
 rows = []
-for c in ["pages", "year", "n_editions", "n_subjects", "rating_rel"]:
+for c in ["pages", "year", "n_editions", "n_subjects", "rating_obs"]:
     s = df[c].dropna()
     _, p_norm = stats.normaltest(s)
     rows.append({"feature": c, "n": len(s), "skewness": round(float(stats.skew(s)), 2), "normality_p": p_norm})
@@ -78,7 +78,7 @@ display(normality)
 # ## 2. Relationships between variables
 
 # %%
-corr_cols = ["pages", "year", "n_editions", "n_subjects", "rating_rel", "popular"]
+corr_cols = ["pages", "year", "n_editions", "n_subjects", "rating_obs", "popular"]
 corr = df[corr_cols].corr(method="spearman")
 fig, ax = plt.subplots(figsize=(8, 6.5))
 sns.heatmap(corr, annot=True, fmt=".2f", cmap=DIVERGING_CMAP, center=0, vmin=-1, vmax=1,
@@ -116,13 +116,17 @@ results = []
 
 
 def log_result(hypothesis, test, stat, p, effect_name, effect):
+    if np.isnan(p):
+        decision = "Test not valid (NaN)"
+    else:
+        decision = "Reject H0" if p < 0.05 else "Fail to reject H0"
     results.append({
         "hypothesis": hypothesis,
         "test": test,
         "statistic": round(float(stat), 3),
         "p_value": float(p),
         "effect_size": f"{effect_name} = {effect:.3f}",
-        "decision (alpha 0.05)": "Reject H0" if p < 0.05 else "Fail to reject H0",
+        "decision (alpha 0.05)": decision,
     })
 
 
@@ -138,17 +142,33 @@ for col, name in [("pages", "page count"), ("year", "publication year"),
     log_result(f"H0: {name} is the same for popular and not-popular books", "Mann-Whitney U", u, p, "rank-biserial r", r)
 
 # %%
-# H2: average rating differs between popular and not-popular books (Welch t-test, books with 5+ ratings)
-a = df.loc[(df["popular"] == 1) & df["rating_rel"].notna(), "rating_rel"]
-b = df.loc[(df["popular"] == 0) & df["rating_rel"].notna(), "rating_rel"]
-t, p = stats.ttest_ind(a, b, equal_var=False)
-d = (a.mean() - b.mean()) / np.sqrt((a.var(ddof=1) + b.var(ddof=1)) / 2)
-print(f"Mean rating: popular = {a.mean():.2f} (n={len(a)}), not popular = {b.mean():.2f} (n={len(b)})")
-print(f"Welch t = {t:.3f}, p = {p:.4g}, Cohen's d = {d:.3f}")
-u2, p2 = stats.mannwhitneyu(a, b, alternative="two-sided")
-print(f"Robustness check (Mann-Whitney U): p = {p2:.4g}")
-log_result("H0: mean rating is the same for popular and not-popular books (5+ ratings)",
-           "Welch t-test", t, p, "Cohen's d", d)
+# Why ratings need care: how many books of each group have at least k ratings?
+rows = []
+for k in [1, 2, 3, 5]:
+    has = df["n_ratings"].fillna(0) >= k
+    rows.append({"min_ratings": k,
+                 "popular_books": int((has & (df["popular"] == 1)).sum()),
+                 "not_popular_books": int((has & (df["popular"] == 0)).sum())})
+display(pd.DataFrame(rows))
+
+# %%
+# H2: average rating differs between popular and not-popular books (Welch t-test, any observed rating)
+# Note: averages built from very few ratings are noisy, so this is read with caution.
+a = df.loc[(df["popular"] == 1) & df["rating_obs"].notna(), "rating_obs"]
+b = df.loc[(df["popular"] == 0) & df["rating_obs"].notna(), "rating_obs"]
+print(f"Group sizes: popular n = {len(a)}, not popular n = {len(b)}")
+
+if len(a) >= 2 and len(b) >= 2:
+    t, p = stats.ttest_ind(a, b, equal_var=False)
+    d = (a.mean() - b.mean()) / np.sqrt((a.var(ddof=1) + b.var(ddof=1)) / 2)
+    print(f"Mean rating: popular = {a.mean():.2f}, not popular = {b.mean():.2f}")
+    print(f"Welch t = {t:.3f}, p = {p:.4g}, Cohen's d = {d:.3f}")
+    u2, p2 = stats.mannwhitneyu(a, b, alternative="two-sided")
+    print(f"Robustness check (Mann-Whitney U): p = {p2:.4g}")
+    log_result("H0: mean rating is the same for popular and not-popular books (any observed rating)",
+               "Welch t-test", t, p, "Cohen's d", d)
+else:
+    print("Not enough rated books in one group, so the t-test is skipped.")
 
 # %%
 # H3: subject tags and popularity (Chi-square, Bonferroni-adjusted)
@@ -198,13 +218,18 @@ ax.legend()
 save_show(fig, "10_tag_popularity_rates.png")
 
 # %%
-# H4: is missing page count related to popularity? (Chi-square)
+# H4: is a missing page count related to popularity? (Chi-square)
 res = chi_binary("pages_missing")
 if res is not None:
     chi2, p, v, wr, wor, n_with = res
     print(f"Popular rate when pages missing = {wr:.1%}, when pages present = {wor:.1%}")
     print(f"Chi-square = {chi2:.3f}, p = {p:.4g}, Cramer's V = {v:.3f}")
     log_result("H0: a missing page count is unrelated to popularity", "Chi-square test", chi2, p, "Cramer's V", v)
+
+# %% [markdown]
+# **Note for the report:** a missing page count, few editions and few subject tags all describe a thinly
+# documented catalogue record. Records tend to be completed when a book is popular, so part of what the models
+# learn is how well documented a book is, not only what makes it popular. This is stated as a limitation.
 
 # %%
 # H5: want-to-read counts differ across publication periods (ANOVA and Kruskal-Wallis on log counts)
