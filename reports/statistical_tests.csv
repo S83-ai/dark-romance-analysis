@@ -1,0 +1,10 @@
+hypothesis,test,statistic,p_value,effect_size,decision (alpha 0.05)
+H0: page count is the same for popular and not-popular books,Mann-Whitney U,193751.5,2.991821154413751e-11,rank-biserial r = 0.233,Reject H0
+H0: publication year is the same for popular and not-popular books,Mann-Whitney U,219902.0,5.3076510062756315e-46,rank-biserial r = -0.398,Reject H0
+H0: number of editions is the same for popular and not-popular books,Mann-Whitney U,611735.0,2.4859469521413336e-72,rank-biserial r = 0.458,Reject H0
+H0: number of subject tags is the same for popular and not-popular books,Mann-Whitney U,584832.5,5.712872365078087e-49,rank-biserial r = 0.394,Reject H0
+H0: mean rating is the same for popular and not-popular books (5+ ratings),Welch t-test,,,Cohen's d = nan,Fail to reject H0
+H0: the tag 'fiction' is unrelated to popularity (Bonferroni-adjusted p),Chi-square test,128.393,2.3018085473756386e-28,Cramer's V = 0.265,Reject H0
+H0: a missing page count is unrelated to popularity,Chi-square test,295.56,3.0551461819817004e-66,Cramer's V = 0.401,Reject H0
+H0: mean log want-to-read count is equal across the four publication periods,One-way ANOVA,34.268,1.6682592664378561e-21,eta squared = 0.057,Reject H0
+H0: want-to-read counts have the same distribution across the four publication periods,Kruskal-Wallis,156.375,1.1102973260578152e-33,eta squared (ANOVA) = 0.057,Reject H0
