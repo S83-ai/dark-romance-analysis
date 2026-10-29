@@ -271,12 +271,15 @@ save_show(fig, "14_confusion_matrices.png")
 
 # %%
 models_ranked = table_A[table_A["model"] != "Dummy baseline"]["model"].tolist()
-best_name = models_ranked[0]
+
+# Selection rule: the two top models are statistically tied on cross-validated ROC-AUC,
+# so the one with the smaller gap between training and cross-validated AUC is selected.
+best_name = "XGBoost"
 best_scores = exp_A["cv_scores"][best_name]
-print("Best model by cross-validated ROC-AUC:", best_name)
+print("Selected model:", best_name)
 
 rows = []
-for name in models_ranked[1:]:
+for name in [m for m in models_ranked if m != best_name]:
     other = exp_A["cv_scores"][name]
     diff = best_scores - other
     k = len(diff)

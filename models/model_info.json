@@ -1,5 +1,5 @@
 {
-  "model": "Random Forest",
+  "model": "XGBoost",
   "features": [
     "pages",
     "year",
