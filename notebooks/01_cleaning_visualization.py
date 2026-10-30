@@ -9,6 +9,7 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
+from IPython.display import display
 
 import matplotlib.pyplot as plt
 import numpy as np
